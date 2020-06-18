@@ -193,3 +193,9 @@ class MapGen:
             pd.DataFrame(data_dict['maps'][i].reshape(128, 128)).to_csv(matrix_loc)
             imageio.imsave((subject_maps_dir + str(i) + ".png"), data_dict['maps'][i].reshape(128, 128))
             print((subject_maps_dir + str(i) + ".png"))
+
+#Sample code for execution
+#instance = MapGen()
+#instance.load_data(data_folder, surrogates_file_name)
+#instance.calculate_global_params()
+#instance.make_maps(folder_to_save_the_maps)
