@@ -9,6 +9,7 @@ from scipy.stats import matrix_normal as mnn
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
+
 class MapGen:
     def __init__(self):
         self.real_maps = []
@@ -194,8 +195,38 @@ class MapGen:
             imageio.imsave((subject_maps_dir + str(i) + ".png"), data_dict['maps'][i].reshape(128, 128))
             print((subject_maps_dir + str(i) + ".png"))
 
-#Sample code for execution
-#instance = MapGen()
-#instance.load_data(data_folder, surrogates_file_name)
-#instance.calculate_global_params()
-#instance.make_maps(folder_to_save_the_maps)
+
+def visualize(data, threshold):
+    """
+    Scale the data for visualization
+    :param data: the array of data to be displayed together
+    :param threshold: activation value to set as the neutral/middle color value
+    :return: rescaled data for visualizing, on a scale of 0-255 (uint8)
+    """
+    map_list = []
+
+    # Define the scaler for scaling the value above and below the threshold
+    min_scale = MinMaxScaler(feature_range=(0, 127))
+    max_scale = MinMaxScaler(feature_range=(128, 255))
+
+    # Fit the data to the scalers
+    min_scale = min_scale.fit(data.flatten()[np.where(data.flatten() < threshold)].reshape(-1, 1))
+    max_scale = max_scale.fit(data.flatten()[np.where(data.flatten() >= threshold)].reshape(-1, 1))
+
+    # Scale the data
+    for i in data:
+        i = i.flatten()
+        scaled_map = np.ndarray(shape=(i.flatten().shape[0],))
+        scaled_map[np.where(i < threshold)] = min_scale.transform(
+            i[np.where(i < threshold)].flatten().reshape(-1, 1)).flatten()
+        scaled_map[np.where(i >= threshold)] = max_scale.transform(
+            i[np.where(i >= threshold)].flatten().reshape(-1, 1)).flatten()
+        map_list.append(scaled_map.flatten())
+    return (np.uint8(np.array(map_list)))
+
+# Sample code for execution
+# instance = MapGen()
+# instance.load_data(data_folder, surrogates_file_name)
+# instance.calculate_global_params()
+# instance.make_maps(folder_to_save_the_maps)
+# rescaled_maps_for_visualizing = visualize(instance.gen_maps[map_index])
