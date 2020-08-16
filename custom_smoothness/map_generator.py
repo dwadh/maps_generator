@@ -93,8 +93,8 @@ class MapGen:
         # Generate Subject specific component
         subject_variance = np.nanmean((np.nanmean(subject, axis=0) - self.xbar) ** 2)
         subject_component = self.surrogates[sub_index]
-        subject_component = subject_component - subject_component.mean()
-        subject_component = subject_component * (np.sqrt(subject_variance)
+        #subject_component = subject_component - subject_component.mean()
+        #subject_component = subject_component * (np.sqrt(subject_variance)
                                                  / np.std(subject_component))
         print ("Finger")
         # Generate finger specific components
