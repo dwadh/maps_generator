@@ -1,22 +1,19 @@
 import os
 import numpy as np
-import matplotlib.pyplot as plt
-import numpy as np
 import glob
 import scipy.io
-import numpy as np
 from scipy.stats import matrix_normal as mnn
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 import pickle as pkl
 import imageio
 from scipy.sparse import csr_matrix
+from numpy.linalg import cholesky as chol
 
 class MapGen:
     def __init__(self):
         self.real_maps = []
         self.gen_maps = []
-        self.surrogates = []
         self.xbar = np.ndarray(shape=(16384,))
         self.var_s = []
         self.subject_dirs = []
@@ -28,12 +25,11 @@ class MapGen:
                     "components": [],
                     "voxel_map": []}
 
-    def load_data(self, data_dir, surrogates_file):
+    def load_data(self, data_dir):
         """
-        Load the real maps and surrogates
+        Load the real maps
         :param
         data_dir: folder with real data
-        surrogates_file: location of surrogates.txt
         """
 
         real_maps = []
@@ -44,7 +40,6 @@ class MapGen:
             subject_dirs.append(subject_dir)
 
         self.real_maps = np.array(real_maps)
-        self.surrogates = np.loadtxt(surrogates_file)
         self.subject_dirs = subject_dirs
         self.data_dir = data_dir
 
@@ -63,6 +58,7 @@ class MapGen:
             subject_var.append(np.nanmean((np.nanmean(subject, axis=0) -
                                            self.xbar) ** 2))
         self.var_s = np.array(subject_var)
+
 
     def calculate_map_params(self, subject, subject_dir, sub_index):
         """
@@ -91,17 +87,24 @@ class MapGen:
         del mappingFile
         print ("Subject")
         # Generate Subject specific component
-        subject_variance = np.nanmean((np.nanmean(subject, axis=0) - self.xbar) ** 2)
-        subject_component = self.surrogates[sub_index]
-        #subject_component = subject_component - subject_component.mean()
-        #subject_component = subject_component * (np.sqrt(subject_variance)
-                                                 / np.std(subject_component))
-        print ("Finger")
-        # Generate finger specific components
+        subject_component = np.mean(subject, axis = 0)
         subject_covariance_matrix = np.dot((subject_component.reshape(16384, 1) -
                                             subject_component.mean()),
                                            (subject_component.reshape(1, 16384) -
                                             subject_component.mean())) + np.eye(16384) * 0.0000001
+        a = chol(subject_covariance_matrix)
+        z = np.random.normal(0, 1, size = (16384,))
+        z = z/np.std(z)
+        subject_component = np.dot(a, z)
+        subject_component = (subject_component/subject_component.std()) * (np.sqrt(self.var_s[sub_index]))
+        print (subject_component.mean(), subject_component.min(), subject_component.max(), subject_component.std())
+        subject_covariance_matrix = np.dot((subject_component.reshape(16384, 1) -
+                                            subject_component.mean()),
+                                           (subject_component.reshape(1, 16384) -
+                                            subject_component.mean())) + np.eye(16384) * 0.0000001
+        print ("Finger")
+        # Generate finger specific components
+
         finger_covariance_matrix = \
             np.ma.cov(np.ma.masked_invalid(subject - subject.mean(axis=0))) + 0.0000001
         finger_component = mnn.rvs(rowcov=finger_covariance_matrix,
@@ -127,7 +130,7 @@ class MapGen:
             "noise_component": noise_list,
             "noise_visualize": pixel_noise_list
         }
-        del noise_list, finger_component, pixel_noise_list, noise_mat
+        del noise_list, finger_component, pixel_noise_list, noise_mat, subject_covariance_matrix
         return data_dict
 
     def make_maps(self, save_dir):
@@ -138,6 +141,7 @@ class MapGen:
         """
         print ("Make Maps")
         generated_maps = []
+        self.real_maps = self.real_maps - self.xbar
         for i in range(0, self.real_maps.shape[0]):
             maps_list = []
             data_dict = self.calculate_map_params(self.real_maps[i],
@@ -177,7 +181,7 @@ class MapGen:
             data_dict['maps'] = maps_list
             data_dict['true_maps'] = true_maps
             print ("Save")
-            self.save_map(data_dict, i, save_dir)
+            self.save_map(data_dict, self.subject_dirs[i], save_dir)
             generated_maps.append(maps_list)
 
         self.gen_maps = np.array(generated_maps)
@@ -247,10 +251,10 @@ def visualize(data, threshold):
 
 # Sample code for execution
 instance = MapGen()
-instance.load_data("../pyData", "surrogates_adv_new.txt")
+instance.load_data("../pyData")
 instance.calculate_global_params()
-instance.make_maps("new_data_py_custom_new/")
-dict_loc = "new_data_py_" + "variances_adv_new.pkl"
+instance.make_maps("gen_data_ns/")
+dict_loc = "gen_data_surr_cov_" + "variances.pkl"
 with open(dict_loc, mode = "wb") as f:
             pkl.dump(instance.var, f)
 # rescaled_maps_for_visualizing = visualize(instance.gen_maps[map_index])
