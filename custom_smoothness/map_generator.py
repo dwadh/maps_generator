@@ -18,12 +18,13 @@ class MapGen:
         self.var_s = []
         self.subject_dirs = []
         self.data_dir = ""
-        self.var = {"true_pixel": [],
+        self.var_style = {"true_pixel": [],
                     "true_voxel": [],
                     "noise_pixel": [],
                     "noise_voxel": [],
                     "components": [],
                     "voxel_map": []}
+        self.var = {}
 
     def load_data(self, data_dir):
         """
@@ -51,7 +52,7 @@ class MapGen:
 
         # Mean map
         self.xbar = np.mean(np.nanmean(self.real_maps, axis=1), axis=0)
-
+        self.real_maps = self.real_maps - self.xbar
         # Variance matrix
         subject_var = []
         for subject in self.real_maps:
@@ -86,6 +87,7 @@ class MapGen:
         avg_Bvar_est = mappingFile['avg_Bvar_est']
         del mappingFile
         print ("Subject")
+
         # Generate Subject specific component
         subject_component = np.mean(subject, axis = 0)
         subject_covariance_matrix = np.dot((subject_component.reshape(16384, 1) -
@@ -115,9 +117,8 @@ class MapGen:
         pixel_noise_list = []
         try:
             for _iter in range(0, 5):
-                noise = mnn.rvs(rowcov=noise_mat.T)
+                noise = mnn.rvs(rowcov=noise_mat*avg_Bvar_est)
                 noise = noise - noise.mean()
-                noise = np.multiply(noise, avg_Bvar_est)
                 noise_list.append(noise)
                 pixel_noise = np.dot(vox2pix.T, noise)
                 pixel_noise_list.append(pixel_noise)
@@ -141,7 +142,7 @@ class MapGen:
         """
         print ("Make Maps")
         generated_maps = []
-        self.real_maps = self.real_maps - self.xbar
+        #self.real_maps = self.real_maps - self.xbar
         for i in range(0, self.real_maps.shape[0]):
             maps_list = []
             data_dict = self.calculate_map_params(self.real_maps[i],
@@ -165,16 +166,18 @@ class MapGen:
             # Iterate over the finger components and generated the map for each finger
             for finger in range(0, 5):
                 pixel_map = subject_map + data_dict['finger_component'][finger].reshape(128, 128)
-                self.var["components"].append([self.xbar.var(), data_dict['subject_component'].var(),
+                self.var[self.subject_dirs[i]] = self.var_style
+                self.var[self.subject_dirs[i]]["components"].append([self.xbar.var(), data_dict['subject_component'].var(),
                                                data_dict['finger_component'][finger].var()])
-                self.var["true_pixel"].append(pixel_map.var())
+                self.var[self.subject_dirs[i]]["true_pixel"].append(pixel_map.var())
                 voxel_map = np.dot(pix2vox.T, pixel_map.flatten().reshape(-1, 1))
-                self.var["true_voxel"].append(voxel_map.var())
-                self.var["noise_voxel"].append(data_dict['noise_component'][finger].var())
-                true_map = np.dot(vox2pix.T, voxel_map.flatten())
+                self.var[self.subject_dirs[i]]["true_voxel"].append(voxel_map.var())
+                self.var[self.subject_dirs[i]]["noise_voxel"].append(data_dict['noise_component'][finger].var())
+                #true_map = np.dot(vox2pix.T, voxel_map.flatten())
+                true_map = pixel_map
                 true_maps.append(true_map.flatten())
                 voxel_map = voxel_map + data_dict['noise_component'][finger]
-                self.var["voxel_map"].append(voxel_map.var())
+                self.var[self.subject_dirs[i]]["voxel_map"].append(voxel_map.var())
                 new_map = np.dot(vox2pix.T, voxel_map.flatten())
                 maps_list.append(new_map.flatten())
 
@@ -198,6 +201,7 @@ class MapGen:
         subject_save_dir = save_dir + str(subject_index) + "/"
         subject_matrices_dir = subject_save_dir + "matrices/"
         subject_maps_dir = subject_save_dir + "maps/"
+        true_maps_dir = subject_save_dir + "t_maps/"
         if not os.path.exists(subject_maps_dir):
             os.makedirs(subject_maps_dir)
         #if not os.path.exists(subject_matrices_dir):
@@ -205,6 +209,9 @@ class MapGen:
         matrix_loc = subject_maps_dir + "generatedMaps.pkl"
         with open(matrix_loc, mode = "wb") as f:
             pkl.dump(data_dict['maps'], f)
+        matrix_loc = subject_maps_dir + "trueMaps.pkl"
+        with open(matrix_loc, mode = "wb") as f:
+            pkl.dump(data_dict['true_maps'], f)
         subject_maps_dir1 = subject_save_dir + "maps_imgs/"
         if not os.path.exists(subject_maps_dir1):
             os.makedirs(subject_maps_dir1)
@@ -253,9 +260,8 @@ def visualize(data, threshold):
 instance = MapGen()
 instance.load_data("../pyData")
 instance.calculate_global_params()
-instance.make_maps("gen_data_ns/")
-dict_loc = "gen_data_surr_cov_" + "variances.pkl"
+instance.make_maps("gen_data_ns_new/")
+dict_loc = "gen_data_ns_new_" + "variances.pkl"
 with open(dict_loc, mode = "wb") as f:
             pkl.dump(instance.var, f)
 # rescaled_maps_for_visualizing = visualize(instance.gen_maps[map_index])
-#0.78 - normal adv
