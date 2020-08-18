@@ -135,7 +135,7 @@ class MapGen:
             "subject_component": subject_component,
             "finger_component": finger_component,
             "noise_component": noise_list,
-            "noise_component": pixel_noise_list
+            "noise_pixel": pixel_noise_list
         }
         del noise_list, finger_component, pixel_noise_list, noise_mat, subject_covariance_matrix
         return data_dict
@@ -229,7 +229,7 @@ class MapGen:
         for i in range(0, 5):
             imageio.imsave((subject_maps_dir1 + str(i) + ".png"), data_dict['maps'][i].reshape(128, 128).T)
             print((subject_maps_dir + str(i) + ".png"))
-            
+
         subject_maps_dir2 = subject_save_dir + "maps_true/"
         if not os.path.exists(subject_maps_dir2):
             os.makedirs(subject_maps_dir2)
