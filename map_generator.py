@@ -123,12 +123,7 @@ class MapGen:
         pixel_noise_list = []
         try:
             for _iter in range(0, 5):
-                diag_mat = np.diag([avg_Bvar_est]*noise_mat.shape[0])
-                noise_cov_mat = np.dot(np.dot(diag_mat, noise_mat), diag_mat)
-                a = chol(noise_cov_mat)
-                z = np.random.normal(0, 1, size = (noise_mat.shape[0],))
-                z = z/np.std(z)
-                noise = np.dot(a, z)
+                noise = mnn.rvs(rowcov=noise_mat*avg_Bvar_est)
                 noise = noise - noise.mean()
                 noise_list.append(noise)
                 pixel_noise = np.dot(vox2pix.T, noise)
