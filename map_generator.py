@@ -9,6 +9,7 @@ import pickle as pkl
 import imageio
 from scipy.sparse import csr_matrix
 from numpy.linalg import cholesky as chol
+from scipy.spatial.distance import cdist
 
 class MapGen:
     def __init__(self):
@@ -25,6 +26,8 @@ class MapGen:
                     "components": [],
                     "voxel_map": []}
         self.var = {}
+        self.cov_mat = np.ndarray(shape = (16384, 16384))
+        self.chol_mat = np.ndarray(shape = (16384, 16384))
 
     def load_data(self, data_dir):
         """
@@ -43,6 +46,9 @@ class MapGen:
         self.real_maps = np.array(real_maps)
         self.subject_dirs = subject_dirs
         self.data_dir = data_dir
+    
+    def exponential(self, x, a, b, c):
+        return (a * np.exp(b * (-x**c)))
 
     def calculate_global_params(self):
         """
@@ -61,6 +67,25 @@ class MapGen:
                                            self.xbar) ** 2))
         self.var_s = np.array(subject_var)
 
+        # Covariance Matrix for generating subject components
+
+        # Generate distance matrix
+        print ("Cov-mat")
+        lst = []
+        for i in range (0, 128):
+            for j in range (0, 128):
+                lst.append((i, j))
+        dist_matrix = cdist(lst, lst)
+
+        a = 0.12275941
+        b = 0.10306618
+        c = 0.64741083
+        ypred = self.exponential(dist_matrix, a, b, c)
+        print (ypred.mean(), ypred.std())
+        self.cov_mat = ypred.reshape(16384, 16384)
+        self.chol_mat = chol(self.cov_mat)
+        del dist_matrix, ypred
+
 
     def calculate_map_params(self, subject, subject_dir, sub_index):
         """
@@ -69,7 +94,6 @@ class MapGen:
         :param
         subject: numpy array containing the pixel values for the five fingers
         subject_dir: folder name containing the subject's noise data
-
         :return
         subject_component: subject specific component
         finger_component: array with the finger components
@@ -90,28 +114,23 @@ class MapGen:
 
         # Generate Subject specific component
         print ("Subject")
-        subject_component = np.mean(subject, axis = 0)
-        subject_covariance_matrix = np.dot((subject_component.reshape(-1, 1) -
-                                            subject_component.mean()),
-                                           (subject_component.reshape(1, -1) -
-                                            subject_component.mean())) + np.eye(16384) * 0.0000001
         
-        # Use cholesky decomposition floowed by matrix multiplication to
+        # Use cholesky decomposition followed by matrix multiplication to
         # generate the component with the required correlation structure
 
-        a = chol(subject_covariance_matrix)
+        a = self.chol_mat
+        print (a.mean(), a.std())
+        #print (a.mean(), a.std())
         z = np.random.normal(0, 1, size = (16384,))
         z = z/np.std(z)
         subject_component = np.dot(a, z)
-        subject_component = (subject_component/subject_component.std()) * (np.sqrt(self.var_s[sub_index]))
+        print (np.nanstd(subject_component))
+        subject_component = (subject_component/np.nanstd(subject_component)) * (np.sqrt(self.var_s[sub_index]))
 
         
         # Generate finger specific components
         print ("Finger")
-        subject_covariance_matrix = np.dot((subject_component.reshape(-1, 1) -
-                                            subject_component.mean()),
-                                           (subject_component.reshape(1, -1) -
-                                            subject_component.mean())) + np.eye(16384) * 0.0000001
+        subject_covariance_matrix = self.cov_mat
         finger_covariance_matrix = \
             np.ma.cov(np.ma.masked_invalid(subject - subject.mean(axis=0))) + 0.0000001
         finger_component = mnn.rvs(rowcov=finger_covariance_matrix,
@@ -208,7 +227,6 @@ class MapGen:
         :param data_dict: dictionary containing the maps and components
         :param subject_index: index of the map set
         :param save_dir: directory to save the maps
-
         :return: None
         """
         subject_save_dir = save_dir + str(subject_index) + "/"
@@ -270,10 +288,10 @@ def visualize(data, threshold):
 
 # Sample code for execution
 instance = MapGen()
-instance.load_data("../pyData")
+instance.load_data("/srv/diedrichsen/data/map_generator/pyData")
 instance.calculate_global_params()
-instance.make_maps("gen_data_ns_new/")
-dict_loc = "gen_data_ns_new_" + "variances.pkl"
+instance.make_maps("gen_data/")
+dict_loc = "gen_data_" + "variances.pkl"
 with open(dict_loc, mode = "wb") as f:
             pkl.dump(instance.var, f)
 # rescaled_maps_for_visualizing = visualize(instance.gen_maps[map_index])
