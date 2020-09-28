@@ -10,6 +10,7 @@ import imageio
 from scipy.sparse import csr_matrix
 from numpy.linalg import cholesky as chol
 from scipy.spatial.distance import cdist
+from statsmodels.stats.moment_helpers import corr2cov
 
 class MapGen:
     def __init__(self):
@@ -77,11 +78,20 @@ class MapGen:
                 lst.append((i, j))
         dist_matrix = cdist(lst, lst)
 
+
+        # Calculated parameters from the curve fitting (distance vs covariance)
         a = 0.12275941
         b = 0.10306618
         c = 0.64741083
+
+        """
+        # Median
+        a = 0.11836497
+        b = 0.33571855
+        c = 0.42886912
+        """
+
         ypred = self.exponential(dist_matrix, a, b, c)
-        print (ypred.mean(), ypred.std())
         self.cov_mat = ypred.reshape(16384, 16384)
         self.chol_mat = chol(self.cov_mat)
         del dist_matrix, ypred
@@ -120,12 +130,11 @@ class MapGen:
 
         a = self.chol_mat
         print (a.mean(), a.std())
-        #print (a.mean(), a.std())
         z = np.random.normal(0, 1, size = (16384,))
         z = z/np.std(z)
         subject_component = np.dot(a, z)
-        print (np.nanstd(subject_component))
-        subject_component = (subject_component/np.nanstd(subject_component)) * (np.sqrt(self.var_s[sub_index]))
+        subject_component = subject_component - subject_component.mean()
+        #subject_component = (subject_component/np.nanstd(subject_component)) * (np.sqrt(self.var_s[sub_index]))
 
         
         # Generate finger specific components
@@ -134,15 +143,21 @@ class MapGen:
         finger_covariance_matrix = \
             np.ma.cov(np.ma.masked_invalid(subject - subject.mean(axis=0))) + 0.0000001
         finger_component = mnn.rvs(rowcov=finger_covariance_matrix,
-                                   colcov=subject_covariance_matrix)
+                                   #colcov=subject_covariance_matrix)
+        #z = np.random.normal(size = (5, 16384))
+        #finger_component = np.dot(np.dot(finger_covariance_matrix, z), subject_covariance_matrix)
         
         # Generate noise
         print ("Noise")
         noise_list = []
         pixel_noise_list = []
+        noise_cov = corr2cov(noise_mat, avg_Bvar_est)
+        #noise_cov = noise_mat * avg_Bvar_est
         try:
             for _iter in range(0, 5):
-                noise = mnn.rvs(rowcov=noise_mat*avg_Bvar_est)
+                #noise = mnn.rvs(rowcov=noise_cov)
+                z = np.random.normal(size = (noise_cov.shape[0], 1))
+                noise = noise_cov @ z
                 noise = noise - noise.mean()
                 noise_list.append(noise)
                 pixel_noise = np.dot(vox2pix.T, noise)
@@ -290,8 +305,8 @@ def visualize(data, threshold):
 instance = MapGen()
 instance.load_data("/srv/diedrichsen/data/map_generator/pyData")
 instance.calculate_global_params()
-instance.make_maps("gen_data/")
-dict_loc = "gen_data_" + "variances.pkl"
+instance.make_maps("gen_data_chol/")
+dict_loc = "gen_data_mean_chol_" + "variances.pkl"
 with open(dict_loc, mode = "wb") as f:
             pkl.dump(instance.var, f)
 # rescaled_maps_for_visualizing = visualize(instance.gen_maps[map_index])
