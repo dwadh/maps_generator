@@ -29,6 +29,7 @@ class MapGen:
         self.var = {}
         self.cov_mat = np.ndarray(shape = (16384, 16384))
         self.chol_mat = np.ndarray(shape = (16384, 16384))
+        self.finger_cov = np.ndarray(shape = (5, 5))
 
     def load_data(self, data_dir):
         """
@@ -43,6 +44,8 @@ class MapGen:
             subject_array = np.load(data_dir + "/" + subject_dir + ("/" + subject_dir + "." + "averageMap.pkl"), allow_pickle=True)
             real_maps.append(subject_array.T)
             subject_dirs.append(subject_dir)
+        
+        self.finger_cov = np.load('finger_cov.npy')
 
         self.real_maps = np.array(real_maps)
         self.subject_dirs = subject_dirs
@@ -129,7 +132,6 @@ class MapGen:
         # generate the component with the required correlation structure
 
         a = self.chol_mat
-        print (a.mean(), a.std())
         z = np.random.normal(0, 1, size = (16384,))
         z = z/np.std(z)
         subject_component = np.dot(a, z)
@@ -140,10 +142,11 @@ class MapGen:
         # Generate finger specific components
         print ("Finger")
         subject_covariance_matrix = self.cov_mat
-        finger_covariance_matrix = \
-            np.ma.cov(np.ma.masked_invalid(subject - subject.mean(axis=0))) + 0.0000001
+        #finger_covariance_matrix = \
+        #    np.ma.cov(np.ma.masked_invalid(subject - subject.mean(axis=0))) + 0.0000001
+        subject_covariance_matrix = self.cov_mat
         finger_component = mnn.rvs(rowcov=finger_covariance_matrix,
-                                   #colcov=subject_covariance_matrix)
+                                   colcov=subject_covariance_matrix)
         #z = np.random.normal(size = (5, 16384))
         #finger_component = np.dot(np.dot(finger_covariance_matrix, z), subject_covariance_matrix)
         
@@ -228,7 +231,6 @@ class MapGen:
                 
             data_dict['maps'] = maps_list
             data_dict['true_maps'] = true_maps
-
             # Save the generated maps
             print ("Save")
             self.save_map(data_dict, self.subject_dirs[i], save_dir)
@@ -269,6 +271,19 @@ class MapGen:
         for i in range(0, 5):
             imageio.imsave((subject_maps_dir2 + str(i) + ".png"), data_dict['true_maps'][i].reshape(128, 128).T)
             print((subject_maps_dir + str(i) + ".png"))
+
+        subject_maps_dir3 = subject_save_dir + "maps_fingers/"
+        if not os.path.exists(subject_maps_dir3):
+            os.makedirs(subject_maps_dir3)
+        for i in range(0, 5):
+            imageio.imsave((subject_maps_dir3 + str(i) + ".png"), data_dict['finger_component'][i].reshape(128, 128).T)
+            print((subject_maps_dir + str(i) + ".png"))
+        print("Done: ", matrix_loc)
+
+        subject_maps_dir4 = subject_save_dir + "maps_subject/"
+        if not os.path.exists(subject_maps_dir4):
+            os.makedirs(subject_maps_dir4)
+        imageio.imsave((subject_maps_dir4 + "subject"+ ".png"), data_dict['subject_component'].reshape(128, 128).T)
         print("Done: ", matrix_loc)
 
 
@@ -305,8 +320,8 @@ def visualize(data, threshold):
 instance = MapGen()
 instance.load_data("/srv/diedrichsen/data/map_generator/pyData")
 instance.calculate_global_params()
-instance.make_maps("gen_data_chol/")
-dict_loc = "gen_data_mean_chol_" + "variances.pkl"
+instance.make_maps("gen_data_visualize/")
+dict_loc = "gen_data_visualize_" + "variances.pkl"
 with open(dict_loc, mode = "wb") as f:
             pkl.dump(instance.var, f)
 # rescaled_maps_for_visualizing = visualize(instance.gen_maps[map_index])
